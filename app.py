@@ -5,112 +5,165 @@ from PIL import Image
 from collections import Counter
 import os
 import gdown
+import time
 
-st.set_page_config(page_title="Colon Disease Detection", layout="centered")
+# -------------------------------------------------
+# PAGE CONFIG (Dark Medical Theme)
+# -------------------------------------------------
+st.set_page_config(
+    page_title="Colon Disease Detection",
+    page_icon="🩺",
+    layout="wide"
+)
 
-# -----------------------------
-# Google Drive File IDs (YOUR MODELS)
-# -----------------------------
+# -------------------------------------------------
+# CUSTOM CSS (Dark UI + Buttons)
+# -------------------------------------------------
+st.markdown("""
+<style>
+body {
+    background-color: #0e1117;
+}
+.result-box {
+    background-color: #1b5e20;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+}
+.stButton>button {
+    background-color: #1976d2;
+    color: white;
+    font-size: 18px;
+    border-radius: 8px;
+    padding: 10px 25px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------------------------------
+# SIDEBAR
+# -------------------------------------------------
+st.sidebar.title("🧠 Colon Disease Detection")
+st.sidebar.write(
+    "This system uses an **ensemble deep learning approach** "
+    "to analyze colonoscopy images."
+)
+st.sidebar.markdown("---")
+st.sidebar.warning(
+    "⚠️ For research and educational purposes only.\n"
+    "Not a medical diagnosis."
+)
+
+# -------------------------------------------------
+# GOOGLE DRIVE MODEL FILE IDS
+# -------------------------------------------------
 VGG_ID = "1xqJGFRRQiNlyjiqzAsRhJ3zbkLmYJGUx"
 RESNET_ID = "1jFE8eaxEhSxbvROZegi48FrDxDS9wiul"
 INCEPTION_ID = "1for1P3876wQ48gQuuuOUKsPWfL9qv8I4"
 
-# Local file names (must match loading)
-VGG_FILE = "vgg16.h5"
-RESNET_FILE = "resnet50.h5"
-INCEPTION_FILE = "inceptionv3.h5"
-
-
-# -----------------------------
-# Download model from Google Drive
-# -----------------------------
 def download_model(file_id, output_name):
     if not os.path.exists(output_name):
-        st.info(f"Downloading model: {output_name} ... Please wait ⏳")
+        st.info(f"⬇️ Downloading {output_name} ...")
         url = f"https://drive.google.com/uc?id={file_id}"
         gdown.download(url, output_name, quiet=False)
 
+download_model(VGG_ID, "vgg16.h5")
+download_model(RESNET_ID, "resnet50.h5")
+download_model(INCEPTION_ID, "inceptionv3.h5")
 
-# Download models if missing
-download_model(VGG_ID, VGG_FILE)
-download_model(RESNET_ID, RESNET_FILE)
-download_model(INCEPTION_ID, INCEPTION_FILE)
-
-
-# -----------------------------
-# Load Models (cached)
-# -----------------------------
+# -------------------------------------------------
+# LOAD MODELS
+# -------------------------------------------------
 @st.cache_resource
 def load_models():
-    model_vgg = tf.keras.models.load_model(VGG_FILE)
-    model_resnet = tf.keras.models.load_model(RESNET_FILE)
-    model_inception = tf.keras.models.load_model(INCEPTION_FILE)
-    return model_vgg, model_resnet, model_inception
-
+    return (
+        tf.keras.models.load_model("vgg16.h5"),
+        tf.keras.models.load_model("resnet50.h5"),
+        tf.keras.models.load_model("inceptionv3.h5"),
+    )
 
 model_vgg, model_resnet, model_inception = load_models()
 
-# -----------------------------
-# Class Labels (CHANGE IF YOUR CLASSES DIFFER)
-# -----------------------------
+# -------------------------------------------------
+# CLASS LABELS
+# -------------------------------------------------
 class_names = ["Normal", "Polyp", "Ulcer", "Cancer"]
 
-# -----------------------------
-# UI
-# -----------------------------
-st.title("Colon Disease Detection System")
-st.subheader("Ensemble Deep Learning (Majority Voting)")
-
-st.write("Upload a colonoscopy image and get the final prediction.")
-
-uploaded_file = st.file_uploader(
-    "Upload Image (JPG / PNG)",
-    type=["jpg", "jpeg", "png"]
+# -------------------------------------------------
+# MAIN UI
+# -------------------------------------------------
+st.markdown("<h1 style='text-align:center;'>Colon Disease Detection System</h1>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='text-align:center;'>"
+    "Ensemble Model (VGG16 + ResNet50 + InceptionV3)"
+    "</p>",
+    unsafe_allow_html=True
 )
+st.markdown("---")
 
+col1, col2 = st.columns(2)
 
-# -----------------------------
-# Image Preprocessing
-# -----------------------------
-def preprocess_image(img: Image.Image):
+# -------------------------------------------------
+# IMAGE UPLOAD
+# -------------------------------------------------
+with col1:
+    st.subheader("📤 Upload Colonoscopy Image")
+    uploaded_file = st.file_uploader(
+        "Choose an image",
+        type=["jpg", "jpeg", "png"]
+    )
+
+# -------------------------------------------------
+# PREPROCESS FUNCTION
+# -------------------------------------------------
+def preprocess(img):
     img = img.convert("RGB")
     img = img.resize((224, 224))
     arr = np.array(img) / 255.0
-    arr = np.expand_dims(arr, axis=0)
-    return arr
+    return np.expand_dims(arr, axis=0)
 
+# -------------------------------------------------
+# PREDICTION
+# -------------------------------------------------
+with col2:
+    st.subheader("📊 Prediction Result")
 
-# -----------------------------
-# Prediction
-# -----------------------------
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, use_column_width=True)
 
-    img = preprocess_image(image)
+        img = preprocess(image)
 
-    if st.button("Predict"):
-        try:
-            # Predict from all three models
-            pred_vgg = np.argmax(model_vgg.predict(img))
-            pred_resnet = np.argmax(model_resnet.predict(img))
-            pred_inception = np.argmax(model_inception.predict(img))
+        if st.button("Predict"):
+            with st.spinner("🔍 Analyzing image..."):
+                time.sleep(1.5)
 
-            # Convert to labels
-            results = [
-                class_names[pred_vgg],
-                class_names[pred_resnet],
-                class_names[pred_inception],
-            ]
+                p1 = model_vgg.predict(img)[0]
+                p2 = model_resnet.predict(img)[0]
+                p3 = model_inception.predict(img)[0]
 
-            # Majority Voting
-            final_prediction = Counter(results).most_common(1)[0][0]
+                preds = [
+                    class_names[np.argmax(p1)],
+                    class_names[np.argmax(p2)],
+                    class_names[np.argmax(p3)]
+                ]
 
-            # Display only FINAL output
-            st.success(f"Final Prediction: {final_prediction}")
+                final_prediction = Counter(preds).most_common(1)[0][0]
+                avg_confidence = np.mean([
+                    np.max(p1), np.max(p2), np.max(p3)
+                ])
 
-            st.caption("⚠️ For research and educational purposes only. Not a medical diagnosis.")
+            st.markdown(
+                f"<div class='result-box'>Final Prediction: {final_prediction}</div>",
+                unsafe_allow_html=True
+            )
 
-        except Exception as e:
-            st.error("Something went wrong while predicting.")
-            st.code(str(e))
+            st.progress(int(avg_confidence * 100))
+            st.caption(f"Confidence: {avg_confidence*100:.2f}%")
+
+            if avg_confidence < 0.6:
+                st.warning("⚠️ Low confidence prediction. Please consult a specialist.")
+
